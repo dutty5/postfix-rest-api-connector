@@ -93,7 +93,8 @@ pub async fn handle_tcp_lookup(
     user_agent: &str,
 ) -> Result<String> {
     // Parse: "get SPACE key NEWLINE"
-    let parts: Vec<&str> = request.trim().split_whitespace().collect();
+    // split_whitespace() already trims, so no need to call trim() first
+    let parts: Vec<&str> = request.split_whitespace().collect();
     if parts.len() < 2 || parts[0] != "get" {
         return format_tcp_response(500, "Invalid request");
     }
@@ -126,7 +127,7 @@ pub async fn handle_tcp_lookup(
                         let encoded_values: Vec<String> = arr
                             .iter()
                             .filter_map(|v| v.as_str())
-                            .map(|s| encode_response(s))
+                            .map(encode_response)
                             .collect();
                         
                         if encoded_values.is_empty() {
@@ -225,7 +226,7 @@ pub async fn handle_socketmap_lookup(
                         let encoded_values: Vec<String> = arr
                             .iter()
                             .filter_map(|v| v.as_str())
-                            .map(|s| encode_response(s))
+                            .map(encode_response)
                             .collect();
                         
                         if encoded_values.is_empty() {
