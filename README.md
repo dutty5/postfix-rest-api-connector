@@ -241,6 +241,7 @@ sudo tail -f /var/log/maillog
 - **Bind to localhost** - Default configuration uses 127.0.0.1
 - **TLS support** - HTTPS targets supported by default
 - **Input validation** - All inputs validated before processing
+- Runs as **Unprivileged user** 
 
 ## 📚 Documentation
 
