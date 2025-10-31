@@ -1,0 +1,50 @@
+{
+  "user-agent": "Postfix REST API Connector",
+  "endpoints": [
+    {
+      "name": "domain-lookup",
+      "mode": "tcp-lookup",
+      "target": "https://api.example.com/api/postfix/domain",
+      "bind-address": "127.0.0.1",
+      "bind-port": 9001,
+      "auth-token": "test123",
+      "request-timeout": 2000
+    },
+    {
+      "name": "mailbox-lookup",
+      "mode": "tcp-lookup",
+      "target": "https://api.example.com/api/postfix/mailbox",
+      "bind-address": "127.0.0.1",
+      "bind-port": 9002,
+      "auth-token": "test123",
+      "request-timeout": 2000
+    },
+    {
+      "name": "alias-lookup",
+      "mode": "tcp-lookup",
+      "target": "https://api.example.com/api/postfix/aliases",
+      "bind-address": "127.0.0.1",
+      "bind-port": 9003,
+      "auth-token": "test123",
+      "request-timeout": 2000
+    },
+    {
+      "name": "policy-check",
+      "mode": "policy",
+      "target": "https://api.example.com/api/postfix/policy",
+      "bind-address": "127.0.0.1",
+      "bind-port": 9004,
+      "auth-token": "test123",
+      "request-timeout": 2000
+    },
+    {
+      "name": "socketmap",
+      "mode": "socketmap-lookup",
+      "target": "https://api.example.com/api/postfix",
+      "bind-address": "127.0.0.1",
+      "bind-port": 9005,
+      "auth-token": "test123",
+      "request-timeout": 2000
+    }
+  ]
+}
