@@ -62,9 +62,6 @@ jobs:
           - distro: rockylinux
             version: "9"
             name: el9
-          - distro: almalinux
-            version: "9"
-            name: el9-alma
     
     container:
       image: ${{ matrix.distro }}:${{ matrix.version }}
@@ -173,7 +170,10 @@ jobs:
       shell: bash
       run: |
         VERSION=${{ steps.get_version.outputs.VERSION }}
+        DISTRO_NAME=${{ matrix.name }}
         PKG_NAME="postfix-rest-api-connector_${VERSION}_amd64"
+        PKG_NAME_WITH_DISTRO="postfix-rest-api-connector_${VERSION}_${DISTRO_NAME}_amd64"
+        
         mkdir -p ${PKG_NAME}/DEBIAN
         mkdir -p ${PKG_NAME}/usr/bin
         mkdir -p ${PKG_NAME}/etc/postfix-rest-api-connector
@@ -242,8 +242,11 @@ jobs:
         # Build DEB package
         dpkg-deb --build ${PKG_NAME}
         
-        echo "deb_file=${PKG_NAME}.deb" >> $GITHUB_OUTPUT
-        echo "deb_name=${PKG_NAME}.deb" >> $GITHUB_OUTPUT
+        # Rename to include distro name for uniqueness
+        mv ${PKG_NAME}.deb ${PKG_NAME_WITH_DISTRO}.deb
+        
+        echo "deb_file=${PKG_NAME_WITH_DISTRO}.deb" >> $GITHUB_OUTPUT
+        echo "deb_name=${PKG_NAME_WITH_DISTRO}.deb" >> $GITHUB_OUTPUT
       id: create_deb
     
     - name: Upload DEB artifact
@@ -292,12 +295,28 @@ jobs:
         ## Changes
         See [CHANGELOG.md](CHANGELOG.md) for detailed changes.
         
+        ## Available Packages
+        
+        ### RPM Packages (RHEL/Rocky/Alma/Oracle Linux)
+        - **EL8** (RHEL 8, Rocky 8, Alma 8, Oracle 8): \`postfix-rest-api-connector-${{ steps.get_version.outputs.VERSION }}-1.el8.x86_64.rpm\`
+        - **EL9** (RHEL 9, Rocky 9, Alma 9, Oracle 9): \`postfix-rest-api-connector-${{ steps.get_version.outputs.VERSION }}-1.el9.x86_64.rpm\`
+        
+        ### DEB Packages (Debian/Ubuntu)
+        - **Debian 11**: \`postfix-rest-api-connector_${{ steps.get_version.outputs.VERSION }}_debian11_amd64.deb\`
+        - **Debian 12**: \`postfix-rest-api-connector_${{ steps.get_version.outputs.VERSION }}_debian12_amd64.deb\`
+        - **Ubuntu 22.04 LTS**: \`postfix-rest-api-connector_${{ steps.get_version.outputs.VERSION }}_ubuntu2204_amd64.deb\`
+        - **Ubuntu 24.04 LTS**: \`postfix-rest-api-connector_${{ steps.get_version.outputs.VERSION }}_ubuntu2404_amd64.deb\`
+        
         ## Installation
         
-        ### RPM-based systems (RHEL/Rocky/Alma 8, 9)
+        ### RPM-based systems
         \`\`\`bash
         # Download the appropriate RPM for your distribution
-        sudo rpm -ivh postfix-rest-api-connector-${{ steps.get_version.outputs.VERSION }}-*.rpm
+        # EL8 example:
+        sudo rpm -ivh postfix-rest-api-connector-${{ steps.get_version.outputs.VERSION }}-1.el8.x86_64.rpm
+        
+        # EL9 example:
+        sudo rpm -ivh postfix-rest-api-connector-${{ steps.get_version.outputs.VERSION }}-1.el9.x86_64.rpm
         
         # Configure
         sudo cp /etc/postfix-rest-api-connector/config.json.sample /etc/postfix-rest-api-connector/config.json
@@ -307,10 +326,14 @@ jobs:
         sudo systemctl enable --now postfix-rest-api-connector
         \`\`\`
         
-        ### DEB-based systems (Debian/Ubuntu)
+        ### DEB-based systems
         \`\`\`bash
         # Download the appropriate DEB for your distribution
-        sudo dpkg -i postfix-rest-api-connector_${{ steps.get_version.outputs.VERSION }}_amd64.deb
+        # Debian 12 example:
+        sudo dpkg -i postfix-rest-api-connector_${{ steps.get_version.outputs.VERSION }}_debian12_amd64.deb
+        
+        # Ubuntu 24.04 example:
+        sudo dpkg -i postfix-rest-api-connector_${{ steps.get_version.outputs.VERSION }}_ubuntu2404_amd64.deb
         
         # Configure
         sudo cp /etc/postfix-rest-api-connector/config.json.sample /etc/postfix-rest-api-connector/config.json
