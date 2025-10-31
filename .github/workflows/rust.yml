@@ -1,0 +1,329 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ "main" ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Basic build and test job
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/registry
+        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Cache cargo index
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/git
+        key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Cache target directory
+      uses: actions/cache@v4
+      with:
+        path: target
+        key: ${{ runner.os }}-target-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Build
+      run: cargo build --verbose
+    
+    - name: Run tests
+      run: cargo test --verbose
+    
+    - name: Run clippy
+      run: cargo clippy -- -D warnings
+
+  # Build RPM packages for EL distributions
+  build-rpm:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - distro: rockylinux
+            version: "8"
+            name: el8
+          - distro: rockylinux
+            version: "9"
+            name: el9
+          - distro: almalinux
+            version: "9"
+            name: el9-alma
+    
+    container:
+      image: ${{ matrix.distro }}:${{ matrix.version }}
+    
+    steps:
+    - name: Install dependencies
+      run: |
+        dnf install -y gcc make rpm-build rpmdevtools curl tar gzip openssl-devel
+    
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      run: |
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        source $HOME/.cargo/env
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+    
+    - name: Get version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+    
+    - name: Build release binary
+      run: |
+        source $HOME/.cargo/env
+        cargo build --release
+    
+    - name: Setup RPM build environment
+      run: |
+        rpmdev-setuptree
+        cp target/release/postfix-rest-api-connector ~/rpmbuild/SOURCES/
+        cp postfix-rest-api-connector.spec ~/rpmbuild/SPECS/
+        sed -i "s/^Version:.*/Version:        ${{ steps.get_version.outputs.VERSION }}/" ~/rpmbuild/SPECS/postfix-rest-api-connector.spec
+    
+    - name: Build RPM
+      run: |
+        rpmbuild -bb ~/rpmbuild/SPECS/postfix-rest-api-connector.spec
+    
+    - name: Find RPM file
+      id: find_rpm
+      run: |
+        RPM_FILE=$(find ~/rpmbuild/RPMS -name "*.rpm" -type f | head -1)
+        echo "rpm_file=$RPM_FILE" >> $GITHUB_OUTPUT
+        echo "rpm_name=$(basename $RPM_FILE)" >> $GITHUB_OUTPUT
+    
+    - name: Upload RPM artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: rpm-${{ matrix.name }}
+        path: ${{ steps.find_rpm.outputs.rpm_file }}
+
+  # Build DEB packages for Debian/Ubuntu
+  build-deb:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - distro: debian
+            version: "12"
+            name: debian12
+          - distro: debian
+            version: "11"
+            name: debian11
+          - distro: ubuntu
+            version: "24.04"
+            name: ubuntu2404
+          - distro: ubuntu
+            version: "22.04"
+            name: ubuntu2204
+    
+    container:
+      image: ${{ matrix.distro }}:${{ matrix.version }}
+    
+    steps:
+    - name: Install dependencies
+      run: |
+        apt-get update
+        apt-get install -y build-essential curl pkg-config libssl-dev
+    
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      run: |
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        source $HOME/.cargo/env
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+    
+    - name: Get version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+    
+    - name: Build release binary
+      run: |
+        source $HOME/.cargo/env
+        cargo build --release
+    
+    - name: Create DEB package structure
+      run: |
+        VERSION=${{ steps.get_version.outputs.VERSION }}
+        PKG_NAME="postfix-rest-api-connector_${VERSION}_amd64"
+        mkdir -p ${PKG_NAME}/DEBIAN
+        mkdir -p ${PKG_NAME}/usr/bin
+        mkdir -p ${PKG_NAME}/etc/postfix-rest-api-connector
+        mkdir -p ${PKG_NAME}/lib/systemd/system
+        
+        # Copy binary
+        cp target/release/postfix-rest-api-connector ${PKG_NAME}/usr/bin/
+        chmod 755 ${PKG_NAME}/usr/bin/postfix-rest-api-connector
+        
+        # Copy config sample
+        cp config.json.sample ${PKG_NAME}/etc/postfix-rest-api-connector/
+        
+        # Create systemd service
+        cat > ${PKG_NAME}/lib/systemd/system/postfix-rest-api-connector.service <<'EOF'
+        [Unit]
+        Description=Postfix REST API Connector
+        After=network.target
+        
+        [Service]
+        Type=simple
+        Environment="RUST_LOG=warn"
+        ExecStart=/usr/bin/postfix-rest-api-connector /etc/postfix-rest-api-connector/config.json
+        Restart=on-failure
+        RestartSec=5s
+        User=nobody
+        Group=nogroup
+        
+        [Install]
+        WantedBy=multi-user.target
+        EOF
+        
+        # Create control file
+        cat > ${PKG_NAME}/DEBIAN/control <<EOF
+        Package: postfix-rest-api-connector
+        Version: ${VERSION}
+        Section: mail
+        Priority: optional
+        Architecture: amd64
+        Maintainer: dutty5
+        Description: REST API connector for Postfix mail server
+         A high-performance TCP server that acts as a remote lookup service for
+         Postfix mail server, forwarding requests to REST API endpoints.
+         Written in Rust for maximum performance and reliability.
+        EOF
+        
+        # Create postinst script
+        cat > ${PKG_NAME}/DEBIAN/postinst <<'EOF'
+        #!/bin/sh
+        set -e
+        if [ "$1" = "configure" ]; then
+            systemctl daemon-reload || true
+        fi
+        EOF
+        chmod 755 ${PKG_NAME}/DEBIAN/postinst
+        
+        # Create postrm script
+        cat > ${PKG_NAME}/DEBIAN/postrm <<'EOF'
+        #!/bin/sh
+        set -e
+        if [ "$1" = "remove" ]; then
+            systemctl daemon-reload || true
+        fi
+        EOF
+        chmod 755 ${PKG_NAME}/DEBIAN/postrm
+        
+        # Build DEB package
+        dpkg-deb --build ${PKG_NAME}
+        
+        echo "deb_file=${PKG_NAME}.deb" >> $GITHUB_OUTPUT
+        echo "deb_name=${PKG_NAME}.deb" >> $GITHUB_OUTPUT
+      id: create_deb
+    
+    - name: Upload DEB artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: deb-${{ matrix.name }}
+        path: ${{ steps.create_deb.outputs.deb_file }}
+
+  # Create GitHub Release with all artifacts
+  create-release:
+    needs: [build-rpm, build-deb]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Get version
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+    
+    - name: Display structure of downloaded files
+      run: ls -R artifacts
+    
+    - name: Create checksums
+      run: |
+        cd artifacts
+        find . -type f \( -name "*.rpm" -o -name "*.deb" \) -exec sh -c 'sha256sum "$1" > "$1.sha256"' _ {} \;
+    
+    - name: Generate release notes
+      run: |
+        cat > release_notes.md <<EOF
+        # Postfix REST API Connector v${{ steps.get_version.outputs.VERSION }}
+        
+        ## Changes
+        See [CHANGELOG.md](CHANGELOG.md) for detailed changes.
+        
+        ## Installation
+        
+        ### RPM-based systems (RHEL/Rocky/Alma 8, 9)
+        \`\`\`bash
+        # Download the appropriate RPM for your distribution
+        sudo rpm -ivh postfix-rest-api-connector-${{ steps.get_version.outputs.VERSION }}-*.rpm
+        
+        # Configure
+        sudo cp /etc/postfix-rest-api-connector/config.json.sample /etc/postfix-rest-api-connector/config.json
+        sudo vi /etc/postfix-rest-api-connector/config.json
+        
+        # Start service
+        sudo systemctl enable --now postfix-rest-api-connector
+        \`\`\`
+        
+        ### DEB-based systems (Debian/Ubuntu)
+        \`\`\`bash
+        # Download the appropriate DEB for your distribution
+        sudo dpkg -i postfix-rest-api-connector_${{ steps.get_version.outputs.VERSION }}_amd64.deb
+        
+        # Configure
+        sudo cp /etc/postfix-rest-api-connector/config.json.sample /etc/postfix-rest-api-connector/config.json
+        sudo vi /etc/postfix-rest-api-connector/config.json
+        
+        # Start service
+        sudo systemctl enable --now postfix-rest-api-connector
+        \`\`\`
+        
+        ## Verification
+        Verify checksums after download:
+        \`\`\`bash
+        sha256sum -c <package-file>.sha256
+        \`\`\`
+        EOF
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          artifacts/**/*.rpm
+          artifacts/**/*.deb
+          artifacts/**/*.sha256
+        body_path: release_notes.md
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
