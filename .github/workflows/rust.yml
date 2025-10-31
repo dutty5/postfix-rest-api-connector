@@ -84,14 +84,17 @@ jobs:
     
     - name: Get version from tag
       id: get_version
+      shell: bash
       run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
     
     - name: Build release binary
+      shell: bash
       run: |
-        source $HOME/.cargo/env
+        . "$HOME/.cargo/env"
         cargo build --release
     
     - name: Setup RPM build environment
+      shell: bash
       run: |
         rpmdev-setuptree
         cp target/release/postfix-rest-api-connector ~/rpmbuild/SOURCES/
@@ -99,11 +102,13 @@ jobs:
         sed -i "s/^Version:.*/Version:        ${{ steps.get_version.outputs.VERSION }}/" ~/rpmbuild/SPECS/postfix-rest-api-connector.spec
     
     - name: Build RPM
+      shell: bash
       run: |
         rpmbuild -bb ~/rpmbuild/SPECS/postfix-rest-api-connector.spec
     
     - name: Find RPM file
       id: find_rpm
+      shell: bash
       run: |
         RPM_FILE=$(find ~/rpmbuild/RPMS -name "*.rpm" -type f | head -1)
         echo "rpm_file=$RPM_FILE" >> $GITHUB_OUTPUT
@@ -148,9 +153,10 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Install Rust
+      shell: bash
       run: |
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        source $HOME/.cargo/env
+        . "$HOME/.cargo/env"
         echo "$HOME/.cargo/bin" >> $GITHUB_PATH
     
     - name: Get version from tag
@@ -163,6 +169,7 @@ jobs:
         cargo build --release
     
     - name: Create DEB package structure
+      shell: bash
       run: |
         VERSION=${{ steps.get_version.outputs.VERSION }}
         PKG_NAME="postfix-rest-api-connector_${VERSION}_amd64"
@@ -257,6 +264,7 @@ jobs:
     
     - name: Get version
       id: get_version
+      shell: bash
       run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
     
     - name: Download all artifacts
@@ -265,14 +273,17 @@ jobs:
         path: artifacts
     
     - name: Display structure of downloaded files
+      shell: bash
       run: ls -R artifacts
     
     - name: Create checksums
+      shell: bash
       run: |
         cd artifacts
         find . -type f \( -name "*.rpm" -o -name "*.deb" \) -exec sh -c 'sha256sum "$1" > "$1.sha256"' _ {} \;
     
     - name: Generate release notes
+      shell: bash
       run: |
         cat > release_notes.md <<EOF
         # Postfix REST API Connector v${{ steps.get_version.outputs.VERSION }}
