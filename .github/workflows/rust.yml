@@ -59,9 +59,23 @@ jobs:
           - distro: rockylinux
             version: "8"
             name: el8
+            arch: x86_64
+            rust_target: x86_64-unknown-linux-gnu
           - distro: rockylinux
             version: "9"
             name: el9
+            arch: x86_64
+            rust_target: x86_64-unknown-linux-gnu
+          - distro: rockylinux
+            version: "8"
+            name: el8
+            arch: aarch64
+            rust_target: aarch64-unknown-linux-gnu
+          - distro: rockylinux
+            version: "9"
+            name: el9
+            arch: aarch64
+            rust_target: aarch64-unknown-linux-gnu
     
     container:
       image: ${{ matrix.distro }}:${{ matrix.version }}
@@ -69,15 +83,24 @@ jobs:
     steps:
     - name: Install dependencies
       run: |
-        dnf install -y --allowerasing gcc make rpm-build rpmdevtools curl tar gzip openssl-devel
+        dnf install -y --allowerasing gcc make rpm-build rpmdevtools curl tar gzip openssl-devel perl-FindBin
+        if [ "${{ matrix.arch }}" = "aarch64" ]; then
+          dnf install -y gcc-aarch64-linux-gnu
+        fi
     
     - uses: actions/checkout@v4
     
-    - name: Install Rust
+    - name: Install Rust and cross-compilation tools
       shell: bash
       run: |
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
         echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+        export PATH="$HOME/.cargo/bin:$PATH"
+        
+        if [ "${{ matrix.arch }}" = "aarch64" ]; then
+          rustup target add ${{ matrix.rust_target }}
+          cargo install cross --git https://github.com/cross-rs/cross
+        fi
     
     - name: Get version from tag
       id: get_version
@@ -88,7 +111,13 @@ jobs:
       shell: bash
       run: |
         export PATH="$HOME/.cargo/bin:$PATH"
-        cargo build --release
+        
+        if [ "${{ matrix.arch }}" = "aarch64" ]; then
+          cross build --release --target ${{ matrix.rust_target }}
+          cp target/${{ matrix.rust_target }}/release/postfix-rest-api-connector target/release/
+        else
+          cargo build --release
+        fi
     
     - name: Setup RPM build environment
       shell: bash
@@ -97,11 +126,20 @@ jobs:
         cp target/release/postfix-rest-api-connector ~/rpmbuild/SOURCES/
         cp postfix-rest-api-connector.spec ~/rpmbuild/SPECS/
         sed -i "s/^Version:.*/Version:        ${{ steps.get_version.outputs.VERSION }}/" ~/rpmbuild/SPECS/postfix-rest-api-connector.spec
+        
+        # Update spec for architecture
+        if [ "${{ matrix.arch }}" = "aarch64" ]; then
+          sed -i "s/BuildArch:.*/BuildArch:      aarch64/" ~/rpmbuild/SPECS/postfix-rest-api-connector.spec
+        fi
     
     - name: Build RPM
       shell: bash
       run: |
-        rpmbuild -bb ~/rpmbuild/SPECS/postfix-rest-api-connector.spec
+        if [ "${{ matrix.arch }}" = "aarch64" ]; then
+          rpmbuild -bb --target aarch64 ~/rpmbuild/SPECS/postfix-rest-api-connector.spec
+        else
+          rpmbuild -bb ~/rpmbuild/SPECS/postfix-rest-api-connector.spec
+        fi
     
     - name: Find RPM file
       id: find_rpm
@@ -114,7 +152,7 @@ jobs:
     - name: Upload RPM artifact
       uses: actions/upload-artifact@v4
       with:
-        name: rpm-${{ matrix.name }}
+        name: rpm-${{ matrix.name }}-${{ matrix.arch }}
         path: ${{ steps.find_rpm.outputs.rpm_file }}
 
   # Build DEB packages for Debian/Ubuntu
@@ -128,15 +166,43 @@ jobs:
           - distro: debian
             version: "12"
             name: debian12
+            arch: amd64
+            rust_target: x86_64-unknown-linux-gnu
           - distro: debian
             version: "11"
             name: debian11
+            arch: amd64
+            rust_target: x86_64-unknown-linux-gnu
           - distro: ubuntu
             version: "24.04"
             name: ubuntu2404
+            arch: amd64
+            rust_target: x86_64-unknown-linux-gnu
           - distro: ubuntu
             version: "22.04"
             name: ubuntu2204
+            arch: amd64
+            rust_target: x86_64-unknown-linux-gnu
+          - distro: debian
+            version: "12"
+            name: debian12
+            arch: arm64
+            rust_target: aarch64-unknown-linux-gnu
+          - distro: debian
+            version: "11"
+            name: debian11
+            arch: arm64
+            rust_target: aarch64-unknown-linux-gnu
+          - distro: ubuntu
+            version: "24.04"
+            name: ubuntu2404
+            arch: arm64
+            rust_target: aarch64-unknown-linux-gnu
+          - distro: ubuntu
+            version: "22.04"
+            name: ubuntu2204
+            arch: arm64
+            rust_target: aarch64-unknown-linux-gnu
     
     container:
       image: ${{ matrix.distro }}:${{ matrix.version }}
@@ -146,14 +212,23 @@ jobs:
       run: |
         apt-get update
         apt-get install -y build-essential curl pkg-config libssl-dev
+        if [ "${{ matrix.arch }}" = "arm64" ]; then
+          apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+        fi
     
     - uses: actions/checkout@v4
     
-    - name: Install Rust
+    - name: Install Rust and cross-compilation tools
       shell: bash
       run: |
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
         echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+        export PATH="$HOME/.cargo/bin:$PATH"
+        
+        if [ "${{ matrix.arch }}" = "arm64" ]; then
+          rustup target add ${{ matrix.rust_target }}
+          cargo install cross --git https://github.com/cross-rs/cross
+        fi
     
     - name: Get version from tag
       id: get_version
@@ -164,15 +239,23 @@ jobs:
       shell: bash
       run: |
         export PATH="$HOME/.cargo/bin:$PATH"
-        cargo build --release
+        
+        if [ "${{ matrix.arch }}" = "arm64" ]; then
+          cross build --release --target ${{ matrix.rust_target }}
+          mkdir -p target/release
+          cp target/${{ matrix.rust_target }}/release/postfix-rest-api-connector target/release/
+        else
+          cargo build --release
+        fi
     
     - name: Create DEB package structure
       shell: bash
       run: |
         VERSION=${{ steps.get_version.outputs.VERSION }}
         DISTRO_NAME=${{ matrix.name }}
+        ARCH=${{ matrix.arch }}
         PKG_NAME="postfix-rest-api-connector_${VERSION}_amd64"
-        PKG_NAME_WITH_DISTRO="postfix-rest-api-connector_${VERSION}_${DISTRO_NAME}_amd64"
+        PKG_NAME_WITH_DISTRO="postfix-rest-api-connector_${VERSION}_${DISTRO_NAME}_${ARCH}"
         
         mkdir -p ${PKG_NAME}/DEBIAN
         mkdir -p ${PKG_NAME}/usr/bin
@@ -211,7 +294,7 @@ jobs:
         Version: ${VERSION}
         Section: mail
         Priority: optional
-        Architecture: amd64
+        Architecture: ${ARCH}
         Maintainer: dutty5
         Description: REST API connector for Postfix mail server
          A high-performance TCP server that acts as a remote lookup service for
@@ -242,7 +325,7 @@ jobs:
         # Build DEB package
         dpkg-deb --build ${PKG_NAME}
         
-        # Rename to include distro name for uniqueness
+        # Rename to include distro name and architecture for uniqueness
         mv ${PKG_NAME}.deb ${PKG_NAME_WITH_DISTRO}.deb
         
         echo "deb_file=${PKG_NAME_WITH_DISTRO}.deb" >> $GITHUB_OUTPUT
@@ -252,7 +335,7 @@ jobs:
     - name: Upload DEB artifact
       uses: actions/upload-artifact@v4
       with:
-        name: deb-${{ matrix.name }}
+        name: deb-${{ matrix.name }}-${{ matrix.arch }}
         path: ${{ steps.create_deb.outputs.deb_file }}
 
   # Create GitHub Release with all artifacts
@@ -298,25 +381,38 @@ jobs:
         ## Available Packages
         
         ### RPM Packages (RHEL/Rocky/Alma/Oracle Linux)
-        - **EL8** (RHEL 8, Rocky 8, Alma 8, Oracle 8): \`postfix-rest-api-connector-${{ steps.get_version.outputs.VERSION }}-1.el8.x86_64.rpm\`
-        - **EL9** (RHEL 9, Rocky 9, Alma 9, Oracle 9): \`postfix-rest-api-connector-${{ steps.get_version.outputs.VERSION }}-1.el9.x86_64.rpm\`
+        
+        **x86_64 (Intel/AMD):**
+        - **EL8**: \`postfix-rest-api-connector-${{ steps.get_version.outputs.VERSION }}-1.el8.x86_64.rpm\`
+        - **EL9**: \`postfix-rest-api-connector-${{ steps.get_version.outputs.VERSION }}-1.el9.x86_64.rpm\`
+        
+        **aarch64 (ARM64):**
+        - **EL8**: \`postfix-rest-api-connector-${{ steps.get_version.outputs.VERSION }}-1.el8.aarch64.rpm\`
+        - **EL9**: \`postfix-rest-api-connector-${{ steps.get_version.outputs.VERSION }}-1.el9.aarch64.rpm\`
         
         ### DEB Packages (Debian/Ubuntu)
+        
+        **amd64 (Intel/AMD):**
         - **Debian 11**: \`postfix-rest-api-connector_${{ steps.get_version.outputs.VERSION }}_debian11_amd64.deb\`
         - **Debian 12**: \`postfix-rest-api-connector_${{ steps.get_version.outputs.VERSION }}_debian12_amd64.deb\`
-        - **Ubuntu 22.04 LTS**: \`postfix-rest-api-connector_${{ steps.get_version.outputs.VERSION }}_ubuntu2204_amd64.deb\`
-        - **Ubuntu 24.04 LTS**: \`postfix-rest-api-connector_${{ steps.get_version.outputs.VERSION }}_ubuntu2404_amd64.deb\`
+        - **Ubuntu 22.04**: \`postfix-rest-api-connector_${{ steps.get_version.outputs.VERSION }}_ubuntu2204_amd64.deb\`
+        - **Ubuntu 24.04**: \`postfix-rest-api-connector_${{ steps.get_version.outputs.VERSION }}_ubuntu2404_amd64.deb\`
+        
+        **arm64 (ARM64):**
+        - **Debian 11**: \`postfix-rest-api-connector_${{ steps.get_version.outputs.VERSION }}_debian11_arm64.deb\`
+        - **Debian 12**: \`postfix-rest-api-connector_${{ steps.get_version.outputs.VERSION }}_debian12_arm64.deb\`
+        - **Ubuntu 22.04**: \`postfix-rest-api-connector_${{ steps.get_version.outputs.VERSION }}_ubuntu2204_arm64.deb\`
+        - **Ubuntu 24.04**: \`postfix-rest-api-connector_${{ steps.get_version.outputs.VERSION }}_ubuntu2404_arm64.deb\`
         
         ## Installation
         
         ### RPM-based systems
         \`\`\`bash
-        # Download the appropriate RPM for your distribution
-        # EL8 example:
-        sudo rpm -ivh postfix-rest-api-connector-${{ steps.get_version.outputs.VERSION }}-1.el8.x86_64.rpm
-        
-        # EL9 example:
+        # x86_64 example (EL9):
         sudo rpm -ivh postfix-rest-api-connector-${{ steps.get_version.outputs.VERSION }}-1.el9.x86_64.rpm
+        
+        # ARM64 example (EL9):
+        sudo rpm -ivh postfix-rest-api-connector-${{ steps.get_version.outputs.VERSION }}-1.el9.aarch64.rpm
         
         # Configure
         sudo cp /etc/postfix-rest-api-connector/config.json.sample /etc/postfix-rest-api-connector/config.json
@@ -328,12 +424,11 @@ jobs:
         
         ### DEB-based systems
         \`\`\`bash
-        # Download the appropriate DEB for your distribution
-        # Debian 12 example:
-        sudo dpkg -i postfix-rest-api-connector_${{ steps.get_version.outputs.VERSION }}_debian12_amd64.deb
-        
-        # Ubuntu 24.04 example:
+        # x86_64 example (Ubuntu 24.04):
         sudo dpkg -i postfix-rest-api-connector_${{ steps.get_version.outputs.VERSION }}_ubuntu2404_amd64.deb
+        
+        # ARM64 example (Ubuntu 24.04):
+        sudo dpkg -i postfix-rest-api-connector_${{ steps.get_version.outputs.VERSION }}_ubuntu2404_arm64.deb
         
         # Configure
         sudo cp /etc/postfix-rest-api-connector/config.json.sample /etc/postfix-rest-api-connector/config.json
@@ -342,6 +437,11 @@ jobs:
         # Start service
         sudo systemctl enable --now postfix-rest-api-connector
         \`\`\`
+        
+        ## Supported Platforms
+        
+        - **x86_64 / amd64**: Intel and AMD processors
+        - **aarch64 / arm64**: ARM 64-bit processors (AWS Graviton, Raspberry Pi 4/5, etc.)
         
         ## Verification
         Verify checksums after download:
@@ -362,3 +462,10 @@ jobs:
         prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+    - name: Verify release created
+      if: success()
+      shell: bash
+      run: |
+        echo "✅ Release created successfully!"
+        echo "View at: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
