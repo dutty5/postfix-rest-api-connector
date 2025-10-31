@@ -297,7 +297,3 @@ THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND. Use at your 
 
 - Issues: GitHub Issues
 - Postfix docs: http://www.postfix.org/
-
----
-
-**Made with ❤️ and Rust 🦀**
