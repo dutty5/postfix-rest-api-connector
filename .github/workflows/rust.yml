@@ -117,11 +117,11 @@ jobs:
         name: rpm-${{ matrix.name }}-x86_64
         path: ${{ steps.find_rpm.outputs.rpm_file }}
 
-  # Build RPM packages for EL distributions (ARM64)
+  # Build RPM packages for ARM64
   build-rpm-arm64:
     needs: test
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest-arm64
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
@@ -132,51 +132,53 @@ jobs:
             version: "9"
             name: el9
     
-    container:
-      image: ${{ matrix.distro }}:${{ matrix.version }}
-    
     steps:
-    - name: Install dependencies
-      run: |
-        dnf install -y --allowerasing gcc make rpm-build rpmdevtools curl tar gzip openssl-devel
-    
     - uses: actions/checkout@v4
     
-    - name: Install Rust
-      shell: bash
-      run: |
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: arm64
     
     - name: Get version from tag
       id: get_version
       shell: bash
       run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
     
-    - name: Build release binary
-      shell: bash
+    - name: Build ARM64 binary in container
       run: |
-        export PATH="$HOME/.cargo/bin:$PATH"
-        cargo build --release
+        docker run --rm --platform linux/arm64 \
+          -v $PWD:/workspace \
+          -w /workspace \
+          ${{ matrix.distro }}:${{ matrix.version }} \
+          bash -c '
+            dnf install -y gcc make curl tar gzip openssl-devel
+            curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            source $HOME/.cargo/env
+            cargo build --release
+          '
     
-    - name: Setup RPM build environment
-      shell: bash
+    - name: Build ARM64 RPM in container
       run: |
-        rpmdev-setuptree
-        cp target/release/postfix-rest-api-connector ~/rpmbuild/SOURCES/
-        cp postfix-rest-api-connector.spec ~/rpmbuild/SPECS/
-        sed -i "s/^Version:.*/Version:        ${{ steps.get_version.outputs.VERSION }}/" ~/rpmbuild/SPECS/postfix-rest-api-connector.spec
-    
-    - name: Build RPM
-      shell: bash
-      run: |
-        rpmbuild -bb ~/rpmbuild/SPECS/postfix-rest-api-connector.spec
+        docker run --rm --platform linux/arm64 \
+          -v $PWD:/workspace \
+          -w /workspace \
+          ${{ matrix.distro }}:${{ matrix.version }} \
+          bash -c '
+            dnf install -y rpm-build rpmdevtools
+            rpmdev-setuptree
+            cp target/release/postfix-rest-api-connector ~/rpmbuild/SOURCES/
+            cp postfix-rest-api-connector.spec ~/rpmbuild/SPECS/
+            sed -i "s/^Version:.*/Version:        ${{ steps.get_version.outputs.VERSION }}/" ~/rpmbuild/SPECS/postfix-rest-api-connector.spec
+            rpmbuild -bb ~/rpmbuild/SPECS/postfix-rest-api-connector.spec
+            cp ~/rpmbuild/RPMS/aarch64/*.rpm /workspace/
+          '
     
     - name: Find RPM file
       id: find_rpm
       shell: bash
       run: |
-        RPM_FILE=$(find ~/rpmbuild/RPMS -name "*.rpm" -type f | head -1)
+        RPM_FILE=$(find . -maxdepth 1 -name "*.rpm" -type f | head -1)
         echo "rpm_file=$RPM_FILE" >> $GITHUB_OUTPUT
         echo "rpm_name=$(basename $RPM_FILE)" >> $GITHUB_OUTPUT
     
@@ -248,14 +250,11 @@ jobs:
         mkdir -p ${PKG_NAME}/etc/postfix-rest-api-connector
         mkdir -p ${PKG_NAME}/lib/systemd/system
         
-        # Copy binary
         cp target/release/postfix-rest-api-connector ${PKG_NAME}/usr/bin/
         chmod 755 ${PKG_NAME}/usr/bin/postfix-rest-api-connector
         
-        # Copy config sample
         cp config.json.sample ${PKG_NAME}/etc/postfix-rest-api-connector/
         
-        # Create systemd service
         cat > ${PKG_NAME}/lib/systemd/system/postfix-rest-api-connector.service <<'EOF'
         [Unit]
         Description=Postfix REST API Connector
@@ -274,7 +273,6 @@ jobs:
         WantedBy=multi-user.target
         EOF
         
-        # Create control file
         cat > ${PKG_NAME}/DEBIAN/control <<EOF
         Package: postfix-rest-api-connector
         Version: ${VERSION}
@@ -288,7 +286,6 @@ jobs:
          Written in Rust for maximum performance and reliability.
         EOF
         
-        # Create postinst script
         cat > ${PKG_NAME}/DEBIAN/postinst <<'EOF'
         #!/bin/sh
         set -e
@@ -298,7 +295,6 @@ jobs:
         EOF
         chmod 755 ${PKG_NAME}/DEBIAN/postinst
         
-        # Create postrm script
         cat > ${PKG_NAME}/DEBIAN/postrm <<'EOF'
         #!/bin/sh
         set -e
@@ -308,10 +304,7 @@ jobs:
         EOF
         chmod 755 ${PKG_NAME}/DEBIAN/postrm
         
-        # Build DEB package
         dpkg-deb --build ${PKG_NAME}
-        
-        # Rename to include distro name for uniqueness
         mv ${PKG_NAME}.deb ${PKG_NAME_WITH_DISTRO}.deb
         
         echo "deb_file=${PKG_NAME_WITH_DISTRO}.deb" >> $GITHUB_OUTPUT
@@ -324,11 +317,11 @@ jobs:
         name: deb-${{ matrix.name }}-amd64
         path: ${{ steps.create_deb.outputs.deb_file }}
 
-  # Build DEB packages for Debian/Ubuntu (ARM64)
+  # Build DEB packages for ARM64
   build-deb-arm64:
     needs: test
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest-arm64
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
@@ -345,56 +338,47 @@ jobs:
             version: "22.04"
             name: ubuntu2204
     
-    container:
-      image: ${{ matrix.distro }}:${{ matrix.version }}
-    
     steps:
-    - name: Install dependencies
-      run: |
-        apt-get update
-        apt-get install -y build-essential curl pkg-config libssl-dev
-    
     - uses: actions/checkout@v4
     
-    - name: Install Rust
-      shell: bash
-      run: |
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: arm64
     
     - name: Get version from tag
       id: get_version
       shell: bash
       run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
     
-    - name: Build release binary
-      shell: bash
+    - name: Build and package ARM64 DEB
       run: |
-        export PATH="$HOME/.cargo/bin:$PATH"
-        cargo build --release
-    
-    - name: Create DEB package structure
-      shell: bash
-      run: |
-        VERSION=${{ steps.get_version.outputs.VERSION }}
-        DISTRO_NAME=${{ matrix.name }}
-        PKG_NAME="postfix-rest-api-connector_${VERSION}_arm64"
-        PKG_NAME_WITH_DISTRO="postfix-rest-api-connector_${VERSION}_${DISTRO_NAME}_arm64"
-        
-        mkdir -p ${PKG_NAME}/DEBIAN
-        mkdir -p ${PKG_NAME}/usr/bin
-        mkdir -p ${PKG_NAME}/etc/postfix-rest-api-connector
-        mkdir -p ${PKG_NAME}/lib/systemd/system
-        
-        # Copy binary
-        cp target/release/postfix-rest-api-connector ${PKG_NAME}/usr/bin/
-        chmod 755 ${PKG_NAME}/usr/bin/postfix-rest-api-connector
-        
-        # Copy config sample
-        cp config.json.sample ${PKG_NAME}/etc/postfix-rest-api-connector/
-        
-        # Create systemd service
-        cat > ${PKG_NAME}/lib/systemd/system/postfix-rest-api-connector.service <<'EOF'
+        docker run --rm --platform linux/arm64 \
+          -v $PWD:/workspace \
+          -w /workspace \
+          ${{ matrix.distro }}:${{ matrix.version }} \
+          bash -c '
+            apt-get update
+            apt-get install -y build-essential curl pkg-config libssl-dev
+            curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            source $HOME/.cargo/env
+            cargo build --release
+            
+            VERSION=${{ steps.get_version.outputs.VERSION }}
+            DISTRO_NAME=${{ matrix.name }}
+            PKG_NAME="postfix-rest-api-connector_${VERSION}_arm64"
+            PKG_NAME_WITH_DISTRO="postfix-rest-api-connector_${VERSION}_${DISTRO_NAME}_arm64"
+            
+            mkdir -p ${PKG_NAME}/DEBIAN
+            mkdir -p ${PKG_NAME}/usr/bin
+            mkdir -p ${PKG_NAME}/etc/postfix-rest-api-connector
+            mkdir -p ${PKG_NAME}/lib/systemd/system
+            
+            cp target/release/postfix-rest-api-connector ${PKG_NAME}/usr/bin/
+            chmod 755 ${PKG_NAME}/usr/bin/postfix-rest-api-connector
+            cp config.json.sample ${PKG_NAME}/etc/postfix-rest-api-connector/
+            
+            cat > ${PKG_NAME}/lib/systemd/system/postfix-rest-api-connector.service <<EOF2
         [Unit]
         Description=Postfix REST API Connector
         After=network.target
@@ -410,10 +394,9 @@ jobs:
         
         [Install]
         WantedBy=multi-user.target
-        EOF
-        
-        # Create control file
-        cat > ${PKG_NAME}/DEBIAN/control <<EOF
+        EOF2
+            
+            cat > ${PKG_NAME}/DEBIAN/control <<EOF2
         Package: postfix-rest-api-connector
         Version: ${VERSION}
         Section: mail
@@ -424,43 +407,43 @@ jobs:
          A high-performance TCP server that acts as a remote lookup service for
          Postfix mail server, forwarding requests to REST API endpoints.
          Written in Rust for maximum performance and reliability.
-        EOF
-        
-        # Create postinst script
-        cat > ${PKG_NAME}/DEBIAN/postinst <<'EOF'
+        EOF2
+            
+            cat > ${PKG_NAME}/DEBIAN/postinst <<EOF2
         #!/bin/sh
         set -e
-        if [ "$1" = "configure" ]; then
+        if [ "\$1" = "configure" ]; then
             systemctl daemon-reload || true
         fi
-        EOF
-        chmod 755 ${PKG_NAME}/DEBIAN/postinst
-        
-        # Create postrm script
-        cat > ${PKG_NAME}/DEBIAN/postrm <<'EOF'
+        EOF2
+            chmod 755 ${PKG_NAME}/DEBIAN/postinst
+            
+            cat > ${PKG_NAME}/DEBIAN/postrm <<EOF2
         #!/bin/sh
         set -e
-        if [ "$1" = "remove" ]; then
+        if [ "\$1" = "remove" ]; then
             systemctl daemon-reload || true
         fi
-        EOF
-        chmod 755 ${PKG_NAME}/DEBIAN/postrm
-        
-        # Build DEB package
-        dpkg-deb --build ${PKG_NAME}
-        
-        # Rename to include distro name for uniqueness
-        mv ${PKG_NAME}.deb ${PKG_NAME_WITH_DISTRO}.deb
-        
-        echo "deb_file=${PKG_NAME_WITH_DISTRO}.deb" >> $GITHUB_OUTPUT
-        echo "deb_name=${PKG_NAME_WITH_DISTRO}.deb" >> $GITHUB_OUTPUT
-      id: create_deb
+        EOF2
+            chmod 755 ${PKG_NAME}/DEBIAN/postrm
+            
+            dpkg-deb --build ${PKG_NAME}
+            mv ${PKG_NAME}.deb ${PKG_NAME_WITH_DISTRO}.deb
+          '
+    
+    - name: Find DEB file
+      id: find_deb
+      shell: bash
+      run: |
+        DEB_FILE=$(find . -maxdepth 1 -name "*${{ matrix.name }}_arm64.deb" -type f | head -1)
+        echo "deb_file=$DEB_FILE" >> $GITHUB_OUTPUT
+        echo "deb_name=$(basename $DEB_FILE)" >> $GITHUB_OUTPUT
     
     - name: Upload DEB artifact
       uses: actions/upload-artifact@v4
       with:
         name: deb-${{ matrix.name }}-arm64
-        path: ${{ steps.create_deb.outputs.deb_file }}
+        path: ${{ steps.find_deb.outputs.deb_file }}
 
   # Create GitHub Release with all artifacts
   create-release:
