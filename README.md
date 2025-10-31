@@ -10,17 +10,6 @@ A high-performance, memory-safe TCP server that bridges Postfix mail server with
 - **No external dependencies** - Single static binary, no libcurl or cJSON needed
 - **Production ready** - Comprehensive error handling and logging
 
-## 📊 Performance Highlights
-
-```
-Binary size:     3-4 MB (static, no runtime deps)
-Memory (idle):   5-8 MB
-Memory (loaded): 20-30 MB (1000 concurrent connections)
-Throughput:      12,000 requests/second
-P99 latency:     31ms (including 30ms REST API call)
-GC pauses:       0ms (no GC!)
-```
-
 ## 🎯 Supported Protocols
 
 1. **TCP Lookup** - Simple key-value lookups
@@ -264,27 +253,9 @@ sudo tail -f /var/log/maillog
 3. **Timeouts** - Tune `request-timeout` based on your API
 4. **Connection pooling** - Reqwest handles this automatically
 
-## 📊 Benchmarks
-
-```bash
-# Setup: 4-core server, 100 concurrent connections, 30 seconds
-# REST API latency: 30ms
-
-Throughput:      12,180 req/s
-Average latency: 27ms
-P99 latency:     31ms
-P99.9 latency:   90ms
-Memory (peak):   25 MB
-CPU (average):   7%
-```
-
 ## 📄 License
 
 MIT License
-
-## 📄 No Warranty
-
-THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND. Use at your own risk.
 
 ## 🙏 Acknowledgments
 
@@ -295,5 +266,4 @@ THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND. Use at your 
 
 ## 📞 Support
 
-- Issues: GitHub Issues
 - Postfix docs: http://www.postfix.org/
