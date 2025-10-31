@@ -48,8 +48,8 @@ jobs:
     - name: Run clippy
       run: cargo clippy -- -D warnings
 
-  # Build RPM packages for EL distributions
-  build-rpm:
+  # Build RPM packages for EL distributions (x86_64)
+  build-rpm-x86:
     needs: test
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
@@ -59,23 +59,9 @@ jobs:
           - distro: rockylinux
             version: "8"
             name: el8
-            arch: x86_64
-            rust_target: x86_64-unknown-linux-gnu
           - distro: rockylinux
             version: "9"
             name: el9
-            arch: x86_64
-            rust_target: x86_64-unknown-linux-gnu
-          - distro: rockylinux
-            version: "8"
-            name: el8
-            arch: aarch64
-            rust_target: aarch64-unknown-linux-gnu
-          - distro: rockylinux
-            version: "9"
-            name: el9
-            arch: aarch64
-            rust_target: aarch64-unknown-linux-gnu
     
     container:
       image: ${{ matrix.distro }}:${{ matrix.version }}
@@ -83,24 +69,15 @@ jobs:
     steps:
     - name: Install dependencies
       run: |
-        dnf install -y --allowerasing gcc make rpm-build rpmdevtools curl tar gzip openssl-devel perl-FindBin
-        if [ "${{ matrix.arch }}" = "aarch64" ]; then
-          dnf install -y gcc-aarch64-linux-gnu
-        fi
+        dnf install -y --allowerasing gcc make rpm-build rpmdevtools curl tar gzip openssl-devel
     
     - uses: actions/checkout@v4
     
-    - name: Install Rust and cross-compilation tools
+    - name: Install Rust
       shell: bash
       run: |
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
         echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-        export PATH="$HOME/.cargo/bin:$PATH"
-        
-        if [ "${{ matrix.arch }}" = "aarch64" ]; then
-          rustup target add ${{ matrix.rust_target }}
-          cargo install cross --git https://github.com/cross-rs/cross
-        fi
     
     - name: Get version from tag
       id: get_version
@@ -111,13 +88,7 @@ jobs:
       shell: bash
       run: |
         export PATH="$HOME/.cargo/bin:$PATH"
-        
-        if [ "${{ matrix.arch }}" = "aarch64" ]; then
-          cross build --release --target ${{ matrix.rust_target }}
-          cp target/${{ matrix.rust_target }}/release/postfix-rest-api-connector target/release/
-        else
-          cargo build --release
-        fi
+        cargo build --release
     
     - name: Setup RPM build environment
       shell: bash
@@ -126,20 +97,11 @@ jobs:
         cp target/release/postfix-rest-api-connector ~/rpmbuild/SOURCES/
         cp postfix-rest-api-connector.spec ~/rpmbuild/SPECS/
         sed -i "s/^Version:.*/Version:        ${{ steps.get_version.outputs.VERSION }}/" ~/rpmbuild/SPECS/postfix-rest-api-connector.spec
-        
-        # Update spec for architecture
-        if [ "${{ matrix.arch }}" = "aarch64" ]; then
-          sed -i "s/BuildArch:.*/BuildArch:      aarch64/" ~/rpmbuild/SPECS/postfix-rest-api-connector.spec
-        fi
     
     - name: Build RPM
       shell: bash
       run: |
-        if [ "${{ matrix.arch }}" = "aarch64" ]; then
-          rpmbuild -bb --target aarch64 ~/rpmbuild/SPECS/postfix-rest-api-connector.spec
-        else
-          rpmbuild -bb ~/rpmbuild/SPECS/postfix-rest-api-connector.spec
-        fi
+        rpmbuild -bb ~/rpmbuild/SPECS/postfix-rest-api-connector.spec
     
     - name: Find RPM file
       id: find_rpm
@@ -152,57 +114,23 @@ jobs:
     - name: Upload RPM artifact
       uses: actions/upload-artifact@v4
       with:
-        name: rpm-${{ matrix.name }}-${{ matrix.arch }}
+        name: rpm-${{ matrix.name }}-x86_64
         path: ${{ steps.find_rpm.outputs.rpm_file }}
 
-  # Build DEB packages for Debian/Ubuntu
-  build-deb:
+  # Build RPM packages for EL distributions (ARM64)
+  build-rpm-arm64:
     needs: test
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-arm64
     strategy:
       matrix:
         include:
-          - distro: debian
-            version: "12"
-            name: debian12
-            arch: amd64
-            rust_target: x86_64-unknown-linux-gnu
-          - distro: debian
-            version: "11"
-            name: debian11
-            arch: amd64
-            rust_target: x86_64-unknown-linux-gnu
-          - distro: ubuntu
-            version: "24.04"
-            name: ubuntu2404
-            arch: amd64
-            rust_target: x86_64-unknown-linux-gnu
-          - distro: ubuntu
-            version: "22.04"
-            name: ubuntu2204
-            arch: amd64
-            rust_target: x86_64-unknown-linux-gnu
-          - distro: debian
-            version: "12"
-            name: debian12
-            arch: arm64
-            rust_target: aarch64-unknown-linux-gnu
-          - distro: debian
-            version: "11"
-            name: debian11
-            arch: arm64
-            rust_target: aarch64-unknown-linux-gnu
-          - distro: ubuntu
-            version: "24.04"
-            name: ubuntu2404
-            arch: arm64
-            rust_target: aarch64-unknown-linux-gnu
-          - distro: ubuntu
-            version: "22.04"
-            name: ubuntu2204
-            arch: arm64
-            rust_target: aarch64-unknown-linux-gnu
+          - distro: rockylinux
+            version: "8"
+            name: el8
+          - distro: rockylinux
+            version: "9"
+            name: el9
     
     container:
       image: ${{ matrix.distro }}:${{ matrix.version }}
@@ -210,25 +138,15 @@ jobs:
     steps:
     - name: Install dependencies
       run: |
-        apt-get update
-        apt-get install -y build-essential curl pkg-config libssl-dev
-        if [ "${{ matrix.arch }}" = "arm64" ]; then
-          apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-        fi
+        dnf install -y --allowerasing gcc make rpm-build rpmdevtools curl tar gzip openssl-devel
     
     - uses: actions/checkout@v4
     
-    - name: Install Rust and cross-compilation tools
+    - name: Install Rust
       shell: bash
       run: |
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
         echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-        export PATH="$HOME/.cargo/bin:$PATH"
-        
-        if [ "${{ matrix.arch }}" = "arm64" ]; then
-          rustup target add ${{ matrix.rust_target }}
-          cargo install cross --git https://github.com/cross-rs/cross
-        fi
     
     - name: Get version from tag
       id: get_version
@@ -239,23 +157,91 @@ jobs:
       shell: bash
       run: |
         export PATH="$HOME/.cargo/bin:$PATH"
-        
-        if [ "${{ matrix.arch }}" = "arm64" ]; then
-          cross build --release --target ${{ matrix.rust_target }}
-          mkdir -p target/release
-          cp target/${{ matrix.rust_target }}/release/postfix-rest-api-connector target/release/
-        else
-          cargo build --release
-        fi
+        cargo build --release
+    
+    - name: Setup RPM build environment
+      shell: bash
+      run: |
+        rpmdev-setuptree
+        cp target/release/postfix-rest-api-connector ~/rpmbuild/SOURCES/
+        cp postfix-rest-api-connector.spec ~/rpmbuild/SPECS/
+        sed -i "s/^Version:.*/Version:        ${{ steps.get_version.outputs.VERSION }}/" ~/rpmbuild/SPECS/postfix-rest-api-connector.spec
+    
+    - name: Build RPM
+      shell: bash
+      run: |
+        rpmbuild -bb ~/rpmbuild/SPECS/postfix-rest-api-connector.spec
+    
+    - name: Find RPM file
+      id: find_rpm
+      shell: bash
+      run: |
+        RPM_FILE=$(find ~/rpmbuild/RPMS -name "*.rpm" -type f | head -1)
+        echo "rpm_file=$RPM_FILE" >> $GITHUB_OUTPUT
+        echo "rpm_name=$(basename $RPM_FILE)" >> $GITHUB_OUTPUT
+    
+    - name: Upload RPM artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: rpm-${{ matrix.name }}-aarch64
+        path: ${{ steps.find_rpm.outputs.rpm_file }}
+
+  # Build DEB packages for Debian/Ubuntu (x86_64)
+  build-deb-x86:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - distro: debian
+            version: "12"
+            name: debian12
+          - distro: debian
+            version: "11"
+            name: debian11
+          - distro: ubuntu
+            version: "24.04"
+            name: ubuntu2404
+          - distro: ubuntu
+            version: "22.04"
+            name: ubuntu2204
+    
+    container:
+      image: ${{ matrix.distro }}:${{ matrix.version }}
+    
+    steps:
+    - name: Install dependencies
+      run: |
+        apt-get update
+        apt-get install -y build-essential curl pkg-config libssl-dev
+    
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      shell: bash
+      run: |
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+    
+    - name: Get version from tag
+      id: get_version
+      shell: bash
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+    
+    - name: Build release binary
+      shell: bash
+      run: |
+        export PATH="$HOME/.cargo/bin:$PATH"
+        cargo build --release
     
     - name: Create DEB package structure
       shell: bash
       run: |
         VERSION=${{ steps.get_version.outputs.VERSION }}
         DISTRO_NAME=${{ matrix.name }}
-        ARCH=${{ matrix.arch }}
         PKG_NAME="postfix-rest-api-connector_${VERSION}_amd64"
-        PKG_NAME_WITH_DISTRO="postfix-rest-api-connector_${VERSION}_${DISTRO_NAME}_${ARCH}"
+        PKG_NAME_WITH_DISTRO="postfix-rest-api-connector_${VERSION}_${DISTRO_NAME}_amd64"
         
         mkdir -p ${PKG_NAME}/DEBIAN
         mkdir -p ${PKG_NAME}/usr/bin
@@ -294,7 +280,7 @@ jobs:
         Version: ${VERSION}
         Section: mail
         Priority: optional
-        Architecture: ${ARCH}
+        Architecture: amd64
         Maintainer: dutty5
         Description: REST API connector for Postfix mail server
          A high-performance TCP server that acts as a remote lookup service for
@@ -325,7 +311,7 @@ jobs:
         # Build DEB package
         dpkg-deb --build ${PKG_NAME}
         
-        # Rename to include distro name and architecture for uniqueness
+        # Rename to include distro name for uniqueness
         mv ${PKG_NAME}.deb ${PKG_NAME_WITH_DISTRO}.deb
         
         echo "deb_file=${PKG_NAME_WITH_DISTRO}.deb" >> $GITHUB_OUTPUT
@@ -335,12 +321,150 @@ jobs:
     - name: Upload DEB artifact
       uses: actions/upload-artifact@v4
       with:
-        name: deb-${{ matrix.name }}-${{ matrix.arch }}
+        name: deb-${{ matrix.name }}-amd64
+        path: ${{ steps.create_deb.outputs.deb_file }}
+
+  # Build DEB packages for Debian/Ubuntu (ARM64)
+  build-deb-arm64:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest-arm64
+    strategy:
+      matrix:
+        include:
+          - distro: debian
+            version: "12"
+            name: debian12
+          - distro: debian
+            version: "11"
+            name: debian11
+          - distro: ubuntu
+            version: "24.04"
+            name: ubuntu2404
+          - distro: ubuntu
+            version: "22.04"
+            name: ubuntu2204
+    
+    container:
+      image: ${{ matrix.distro }}:${{ matrix.version }}
+    
+    steps:
+    - name: Install dependencies
+      run: |
+        apt-get update
+        apt-get install -y build-essential curl pkg-config libssl-dev
+    
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      shell: bash
+      run: |
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+    
+    - name: Get version from tag
+      id: get_version
+      shell: bash
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+    
+    - name: Build release binary
+      shell: bash
+      run: |
+        export PATH="$HOME/.cargo/bin:$PATH"
+        cargo build --release
+    
+    - name: Create DEB package structure
+      shell: bash
+      run: |
+        VERSION=${{ steps.get_version.outputs.VERSION }}
+        DISTRO_NAME=${{ matrix.name }}
+        PKG_NAME="postfix-rest-api-connector_${VERSION}_arm64"
+        PKG_NAME_WITH_DISTRO="postfix-rest-api-connector_${VERSION}_${DISTRO_NAME}_arm64"
+        
+        mkdir -p ${PKG_NAME}/DEBIAN
+        mkdir -p ${PKG_NAME}/usr/bin
+        mkdir -p ${PKG_NAME}/etc/postfix-rest-api-connector
+        mkdir -p ${PKG_NAME}/lib/systemd/system
+        
+        # Copy binary
+        cp target/release/postfix-rest-api-connector ${PKG_NAME}/usr/bin/
+        chmod 755 ${PKG_NAME}/usr/bin/postfix-rest-api-connector
+        
+        # Copy config sample
+        cp config.json.sample ${PKG_NAME}/etc/postfix-rest-api-connector/
+        
+        # Create systemd service
+        cat > ${PKG_NAME}/lib/systemd/system/postfix-rest-api-connector.service <<'EOF'
+        [Unit]
+        Description=Postfix REST API Connector
+        After=network.target
+        
+        [Service]
+        Type=simple
+        Environment="RUST_LOG=warn"
+        ExecStart=/usr/bin/postfix-rest-api-connector /etc/postfix-rest-api-connector/config.json
+        Restart=on-failure
+        RestartSec=5s
+        User=nobody
+        Group=nogroup
+        
+        [Install]
+        WantedBy=multi-user.target
+        EOF
+        
+        # Create control file
+        cat > ${PKG_NAME}/DEBIAN/control <<EOF
+        Package: postfix-rest-api-connector
+        Version: ${VERSION}
+        Section: mail
+        Priority: optional
+        Architecture: arm64
+        Maintainer: dutty5
+        Description: REST API connector for Postfix mail server
+         A high-performance TCP server that acts as a remote lookup service for
+         Postfix mail server, forwarding requests to REST API endpoints.
+         Written in Rust for maximum performance and reliability.
+        EOF
+        
+        # Create postinst script
+        cat > ${PKG_NAME}/DEBIAN/postinst <<'EOF'
+        #!/bin/sh
+        set -e
+        if [ "$1" = "configure" ]; then
+            systemctl daemon-reload || true
+        fi
+        EOF
+        chmod 755 ${PKG_NAME}/DEBIAN/postinst
+        
+        # Create postrm script
+        cat > ${PKG_NAME}/DEBIAN/postrm <<'EOF'
+        #!/bin/sh
+        set -e
+        if [ "$1" = "remove" ]; then
+            systemctl daemon-reload || true
+        fi
+        EOF
+        chmod 755 ${PKG_NAME}/DEBIAN/postrm
+        
+        # Build DEB package
+        dpkg-deb --build ${PKG_NAME}
+        
+        # Rename to include distro name for uniqueness
+        mv ${PKG_NAME}.deb ${PKG_NAME_WITH_DISTRO}.deb
+        
+        echo "deb_file=${PKG_NAME_WITH_DISTRO}.deb" >> $GITHUB_OUTPUT
+        echo "deb_name=${PKG_NAME_WITH_DISTRO}.deb" >> $GITHUB_OUTPUT
+      id: create_deb
+    
+    - name: Upload DEB artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: deb-${{ matrix.name }}-arm64
         path: ${{ steps.create_deb.outputs.deb_file }}
 
   # Create GitHub Release with all artifacts
   create-release:
-    needs: [build-rpm, build-deb]
+    needs: [build-rpm-x86, build-rpm-arm64, build-deb-x86, build-deb-arm64]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
