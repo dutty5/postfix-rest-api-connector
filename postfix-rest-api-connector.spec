@@ -28,8 +28,8 @@ install -d $RPM_BUILD_ROOT%{_bindir}
 install -m 755 %{_sourcedir}/postfix-rest-api-connector $RPM_BUILD_ROOT%{_bindir}/
 
 # Create systemd service
-install -d $RPM_BUILD_ROOT%{_unitdir}
-cat > $RPM_BUILD_ROOT%{_unitdir}/%{name}.service <<'EOF'
+install -d $RPM_BUILD_ROOT/usr/lib/systemd/system
+cat > $RPM_BUILD_ROOT/usr/lib/systemd/system/%{name}.service <<'EOF'
 [Unit]
 Description=Postfix REST API Connector
 After=network.target
@@ -124,7 +124,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_bindir}/%{name}
 %dir %attr(750, nobody, nobody) %{_sysconfdir}/%{name}
 %attr(644, root, root) %{_sysconfdir}/%{name}/config.json.sample
-%{_unitdir}/%{name}.service
+/usr/lib/systemd/system/%{name}.service
 
 %pre
 # Create nobody user if it doesn't exist (usually exists by default)
@@ -187,7 +187,7 @@ NOTICE
 %systemd_postun_with_restart %{name}.service
 
 %changelog
-* Fri Nov 01 2025 dutty5 - 1.0.0-1
+* Thu Oct 31 2024 dutty5 - 1.0.0-1
 - Initial Rust implementation
 - High-performance async I/O with Tokio
 - Zero GC pauses
