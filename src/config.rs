@@ -37,6 +37,8 @@ impl Endpoint {
             .timeout(self.timeout())
             .pool_max_idle_per_host(10)
             .pool_idle_timeout(Duration::from_secs(90))
+            .http2_keep_alive_interval(Duration::from_secs(30))
+            .http2_adaptive_window(true)
             .build()
             .context("Failed to create HTTP client")?;
         self.http_client = Some(Arc::new(client));

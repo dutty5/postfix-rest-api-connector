@@ -1,5 +1,5 @@
 Name:           postfix-rest-api-connector
-Version:        1.0.2
+Version:        1.0.3
 Release:        1%{?dist}
 Summary:        REST API connector for Postfix mail server
 
@@ -186,13 +186,3 @@ NOTICE
 %postun
 %systemd_postun_with_restart %{name}.service
 
-%changelog
-* Thu Oct 31 2024 dutty5 - 1.0.0-1
-- Initial Rust implementation
-- High-performance async I/O with Tokio
-- Zero GC pauses
-- Memory safe implementation
-- Connection pooling for optimal performance
-- Fixed: Proper file permissions and ownership for security
-- Fixed: Config directory owned by nobody:nobody
-- Fixed: Service hardening with systemd security options
