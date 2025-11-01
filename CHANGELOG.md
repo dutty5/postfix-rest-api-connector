@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [v1.0.3] - 2025-11-01
+
+- Better TLS amd HTTP/2 support via rustls
+
+
+## [v1.0.2] - 2025-11-01
+
+- ARM64 builds added
+
+
 ## [v1.0.1] - 2025-11-01
 
 - Debian build added
@@ -34,5 +45,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Production-ready with comprehensive logging
 
 
-[Unreleased]: https://github.com/dutty5/postfix-rest-api-connector/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/dutty5/postfix-rest-api-connector/releases/tag/v1.0.0
+[v1.0.3]: https://github.com/dutty5/postfix-rest-api-connector/releases/tag/v1.0.3
