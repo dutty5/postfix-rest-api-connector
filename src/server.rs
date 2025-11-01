@@ -70,7 +70,11 @@ async fn handle_connection(
 
     // Send response back to Postfix
     socket.write_all(response.as_bytes()).await?;
-    debug!("Sent response: {}", response);
+    
+    // Flush to ensure all data is sent immediately
+    socket.flush().await?;
+    
+    debug!("Sent response: {} bytes", response.len());
 
     Ok(())
 }

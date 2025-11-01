@@ -35,11 +35,12 @@ impl Endpoint {
     pub fn with_client(mut self) -> Result<Self> {
         let client = Client::builder()
             .timeout(self.timeout())
-            .pool_max_idle_per_host(10)
+            .pool_max_idle_per_host(50)
             .pool_idle_timeout(Duration::from_secs(90))
+            .tcp_keepalive(Duration::from_secs(60))
             .http2_adaptive_window(true)
             .http2_keep_alive_interval(Duration::from_secs(30))
-            .http2_keep_alive_timeout(Duration::from_secs(10))
+            .http2_keep_alive_timeout(Duration::from_secs(60))
             .http2_keep_alive_while_idle(true)
             .build()
             .context("Failed to create HTTP client")?;
