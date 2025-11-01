@@ -152,9 +152,9 @@ jobs:
           -w /workspace \
           ${{ matrix.distro }}:${{ matrix.version }} \
           bash -c '
-            dnf install -y gcc make curl tar gzip openssl-devel
+            dnf install -y --allowerasing gcc make curl tar gzip openssl-devel
             curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-            source $HOME/.cargo/env
+            export PATH="$HOME/.cargo/bin:$PATH"
             cargo build --release
           '
     
@@ -165,7 +165,7 @@ jobs:
           -w /workspace \
           ${{ matrix.distro }}:${{ matrix.version }} \
           bash -c '
-            dnf install -y rpm-build rpmdevtools
+            dnf install -y --allowerasing rpm-build rpmdevtools
             rpmdev-setuptree
             cp target/release/postfix-rest-api-connector ~/rpmbuild/SOURCES/
             cp postfix-rest-api-connector.spec ~/rpmbuild/SPECS/
@@ -361,7 +361,7 @@ jobs:
             apt-get update
             apt-get install -y build-essential curl pkg-config libssl-dev
             curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-            source $HOME/.cargo/env
+            export PATH="$HOME/.cargo/bin:$PATH"
             cargo build --release
             
             VERSION=${{ steps.get_version.outputs.VERSION }}
