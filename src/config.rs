@@ -38,10 +38,7 @@ impl Endpoint {
             .pool_max_idle_per_host(50)
             .pool_idle_timeout(Duration::from_secs(90))
             .tcp_keepalive(Duration::from_secs(60))
-            .http2_adaptive_window(true)
-            .http2_keep_alive_interval(Duration::from_secs(30))
-            .http2_keep_alive_timeout(Duration::from_secs(60))
-            .http2_keep_alive_while_idle(true)
+            // http2_adaptive_window is enabled by default in reqwest 0.12+
             .build()
             .context("Failed to create HTTP client")?;
         self.http_client = Some(Arc::new(client));
