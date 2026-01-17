@@ -117,7 +117,7 @@ smtpd_relay_restrictions =
     reject
 
 # Make lookup failures temporary if API
-# endpoint or connector fails
+# endpoint or connector fails (optional)
 unknown_virtual_alias_reject_code = 450
 unknown_local_recipient_reject_code = 450
 unknown_virtual_mailbox_reject_code = 450
