@@ -1,0 +1,1 @@
+{"rustc":16696009966390864400,"features":"","declared_features":"","target":0,"profile":0,"path":0,"deps":[[7456601812775390106,"build_script_build",false,5031666413143062810],[2362109531028465383,"build_script_main",false,11230294162947247493]],"local":[{"RerunIfEnvChanged":{"var":"AWS_LC_RS_DISABLE_SLOW_TESTS","val":null}}],"rustflags":[],"config":0,"compile_kind":0}

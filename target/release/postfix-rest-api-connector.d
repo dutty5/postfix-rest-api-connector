@@ -1,0 +1,1 @@
+/root/postfix-rest-api-connector/target/release/postfix-rest-api-connector: /root/postfix-rest-api-connector/src/config.rs /root/postfix-rest-api-connector/src/main.rs /root/postfix-rest-api-connector/src/protocol.rs /root/postfix-rest-api-connector/src/server.rs
