@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.0.7] - 2026-06-08
+
+- Updated dependencies
+- Bump to rust edition 2024
+
 ## [v1.0.6] - 2026-01-17
 
 - Updated dependencies
@@ -40,4 +45,4 @@ All notable changes to this project will be documented in this file.
 - Production-ready with comprehensive logging
 
 
-[v1.0.6]: https://github.com/dutty5/postfix-rest-api-connector/releases/tag/v1.0.6
+[v1.0.7]: https://github.com/dutty5/postfix-rest-api-connector/releases/tag/v1.0.7
