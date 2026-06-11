@@ -10,7 +10,7 @@ mod protocol;
 mod server;
 
 use config::Config;
-use server::start_endpoint;
+use server::{bind_endpoint, serve_endpoint};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -33,17 +33,27 @@ async fn main() -> Result<()> {
     // Create shutdown channel
     let (shutdown_tx, _) = broadcast::channel(1);
 
+    // Bind ALL listeners first, before serving anything. A bind failure
+    // (port already in use, typo in bind-address) propagates with `?` and
+    // exits non-zero, so systemd sees the failure and a half-configured
+    // service never silently runs with some endpoints missing.
+    let mut bound = Vec::new();
+    for endpoint in &config.endpoints {
+        let endpoint = Arc::new(endpoint.clone().with_client()?);
+        let listener = bind_endpoint(&endpoint).await?;
+        bound.push((listener, endpoint));
+    }
+
     // Start all endpoint servers
     let mut handles = Vec::new();
 
-    for endpoint in &config.endpoints {
-        let endpoint = Arc::new(endpoint.clone().with_client()?);
+    for (listener, endpoint) in bound {
         let user_agent = config.user_agent.clone();
         let mut shutdown_rx = shutdown_tx.subscribe();
 
         let handle = tokio::spawn(async move {
             tokio::select! {
-                result = start_endpoint(endpoint, user_agent) => {
+                result = serve_endpoint(listener, endpoint, user_agent) => {
                     if let Err(e) = result {
                         error!("Endpoint error: {}", e);
                     }
@@ -59,7 +69,7 @@ async fn main() -> Result<()> {
 
     // Wait for shutdown signal
     info!("All endpoints started. Press Ctrl+C to shutdown.");
-    
+
     match signal::ctrl_c().await {
         Ok(()) => {
             info!("Shutdown signal received, stopping...");

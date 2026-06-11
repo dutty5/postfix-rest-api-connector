@@ -1,5 +1,5 @@
 Name:           postfix-rest-api-connector
-Version:        1.0.7
+Version:        1.0.8
 Release:        1%{?dist}
 Summary:        REST API connector for Postfix mail server
 
